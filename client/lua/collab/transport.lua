@@ -21,17 +21,16 @@ function M.connect(host, port, on_message_callback)
     end)
 
     local buffer = ""
-    
+
     M.client:read_start(function(read_err, chunk)
       if read_err then return end
       if chunk then
         buffer = buffer .. chunk
-        -- Zakładamy, że wiadomości są oddzielone nową linią (NDJSON)
-        -- W produkcji warto użyć length-prefixed protocol
+        -- NDJSON - split commands by newlines
         while true do
           local line_end = string.find(buffer, "\n")
           if not line_end then break end
-          
+
           local line = string.sub(buffer, 1, line_end - 1)
           buffer = string.sub(buffer, line_end + 1)
 
