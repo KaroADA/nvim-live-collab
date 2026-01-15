@@ -6,30 +6,33 @@ end
 
 function M.start_session(client_id, project_name)
   local files = {}
-  -- Get all open files
+  local current_buf = vim.api.nvim_get_current_buf()
+
   for _, buf in ipairs(vim.api.nvim_list_bufs()) do
-    if vim.api.nvim_buf_is_loaded(buf) then
-      local path = vim.api.nvim_buf_get_name(buf)
-      -- Relative path
-      path = vim.fn.fnamemodify(path, ":.")
+    if not vim.api.nvim_buf_is_loaded(buf) then goto continue end
+    if not vim.api.nvim_get_option_value('buflisted', { buf = buf }) then goto continue end
+    if vim.api.nvim_get_option_value('buftype', { buf = buf }) ~= "" then goto continue end
 
-      local content = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
+    local path = vim.api.nvim_buf_get_name(buf)
+    if path == "" then goto continue end
 
+    path = vim.fn.fnamemodify(path, ":.")
+    local content = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
+
+    local my_cursor = nil
+    if current_buf == buf then
       local cursor = vim.api.nvim_win_get_cursor(0)
-      local is_current = (vim.api.nvim_get_current_buf() == buf)
-
-      local my_cursor = nil
-      if is_current then
-        my_cursor = { pos = { cursor[1] - 1, cursor[2] }, selection = nil }
-      end
-
-      table.insert(files, {
-        path = path,
-        content = content,
-        is_writeable = vim.bo[buf].modifiable,
-        my_cursor = my_cursor
-      })
+      my_cursor = { pos = { cursor[1] - 1, cursor[2] }, selection = nil }
     end
+
+    table.insert(files, {
+      path = path,
+      content = content,
+      is_writeable = vim.bo[buf].modifiable,
+      my_cursor = my_cursor
+    })
+
+    ::continue::
   end
 
   return {
