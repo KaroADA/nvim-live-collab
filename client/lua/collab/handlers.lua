@@ -40,9 +40,15 @@ end
 function M.on_sync(payload)
   local path = payload.path
   local content = payload.content
+  local revision = payload.revision
 
   -- Sync file
   local buf = state.register_file(path, content, true)
+
+  -- Sync revision
+  if revision then
+    state.set_revision(path, revision)
+  end
 
   -- Sync cursors
   if payload.cursors then
@@ -73,7 +79,38 @@ end
 
 function M.on_edit(sender_id, payload)
   if sender_id == state.client_id then return end
-  -- TODO: Delta edits
+
+  local path = payload.path
+  local buf = state.get_buf_by_path(path)
+
+  if not buf or not vim.api.nvim_buf_is_valid(buf) then return end
+
+  local op = payload.op
+  local start_pos = op.start
+  local end_pos = op["end"]
+  local text = op.text
+
+  state.is_applying_edit = true
+
+  -- Apply the edit
+  local ok, err = pcall(vim.api.nvim_buf_set_text, buf,
+    start_pos.row,
+    start_pos.col,
+    end_pos.row,
+    end_pos.col,
+    text
+  )
+
+  if ok then
+    -- Update our local revision to match the server
+    if payload.revision then
+      state.set_revision(path, payload.revision)
+    end
+  else
+    vim.notify("Collab Apply Error: " .. tostring(err), vim.log.levels.ERROR)
+    -- Maybe re-sync
+  end
+  state.is_applying_edit = false
 end
 
 function M.handle_disconnect()

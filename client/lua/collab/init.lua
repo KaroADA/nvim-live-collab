@@ -105,7 +105,7 @@ local function attach_to_buffer(buf)
           old_end_row,
           old_end_col,
           new_text,
-          tick
+          state.get_revision(relative_path)
         )
         transport.send(msg)
       else

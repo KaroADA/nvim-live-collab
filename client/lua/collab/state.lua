@@ -9,6 +9,7 @@ M.is_applying_edit = false
 
 -- Map file path to buffer id
 M.path_to_buf = {}
+M.file_revisions = {}
 
 M.users = {}
 
@@ -27,6 +28,14 @@ function M.get_buf_by_path(path)
   end
 
   return nil
+end
+
+function M.get_revision(path)
+  return M.file_revisions[path] or 0
+end
+
+function M.set_revision(path, rev)
+  M.file_revisions[path] = rev
 end
 
 function M.register_file(path, content, create_if_missing)
