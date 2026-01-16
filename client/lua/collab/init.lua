@@ -18,9 +18,9 @@ local function enable_cursor_tracking()
     if not transport.client then return end
     local buf = vim.api.nvim_get_current_buf()
     if vim.bo[buf].buftype ~= "" then return end
-    local path = vim.api.nvim_buf_get_name(buf)
+    local path = vim.b[buf].collab_path or vim.fn.fnamemodify(vim.api.nvim_buf_get_name(buf), ":.")
+    path = path:gsub("\\", "/")
     if path == "" then return end
-    path = vim.fn.fnamemodify(path, ":.")
     local cursor = vim.api.nvim_win_get_cursor(0)
     local msg = protocol.cursor(state.client_id, path, cursor[1] - 1, cursor[2])
     transport.send(msg)
@@ -44,13 +44,23 @@ local function enable_cursor_tracking()
   })
 end
 
+local function get_relative_path(buf)
+  local path
+  if vim.b[buf].collab_path then
+    path = vim.b[buf].collab_path
+  else
+    path = vim.fn.fnamemodify(vim.api.nvim_buf_get_name(buf), ":.")
+  end
+  return path:gsub("\\", "/")
+end
+
 local attached_buffers = {}
 local function attach_to_buffer(buf)
   if attached_buffers[buf] then return end
   if not vim.api.nvim_buf_is_loaded(buf) then return end
-  if vim.api.nvim_get_option_value('buftype', { buf = buf }) ~= "" then return end
-  local path = vim.api.nvim_buf_get_name(buf)
-  if path == "" then return end
+
+  local is_collab = vim.b[buf].collab_enabled
+  if not is_collab then return end
 
   local success = vim.api.nvim_buf_attach(buf, false, {
     on_bytes = function(_, buf_handle, tick, start_row, start_col, _, old_end_row_offset, old_end_col_offset, _,
@@ -91,7 +101,7 @@ local function attach_to_buffer(buf)
       )
 
       if ok then
-        local relative_path = vim.fn.fnamemodify(vim.api.nvim_buf_get_name(buf_handle), ":.")
+        local relative_path = get_relative_path(buf_handle)
         local is_range_empty = (start_row == old_end_row) and (start_col == old_end_col)
         local is_text_empty = (#new_text == 1) and (new_text[1] == "")
         if is_range_empty and is_text_empty then
@@ -129,16 +139,31 @@ end
 local function enable_file_tracking()
   local group = vim.api.nvim_create_augroup("CollabEdit", { clear = true })
 
-  -- Attach to all currently open valid buffers
   for _, buf in ipairs(vim.api.nvim_list_bufs()) do
     attach_to_buffer(buf)
   end
 
-  -- Listen for new buffers opening or reading
-  vim.api.nvim_create_autocmd({ "BufReadPost", "BufNewFile" }, {
+  vim.api.nvim_create_autocmd({ "BufReadPost", "BufNewFile", "BufEnter" }, {
     group = group,
     callback = function(args)
-      attach_to_buffer(args.buf)
+      local buf = args.buf
+
+      -- on_bytes listener
+      attach_to_buffer(buf)
+
+      -- Try to sync with server
+      if transport.client and not state.is_host then
+        if vim.b[buf].collab_enabled then
+          local path = get_relative_path(buf)
+          vim.notify(path)
+
+          if path and state.known_server_files[path] then
+            vim.notify("Syncing: " .. path, vim.log.levels.INFO)
+            local msg = protocol.request_sync(state.client_id, path)
+            transport.send(msg)
+          end
+        end
+      end
     end
   })
 end
@@ -157,6 +182,20 @@ function M.start_host(username)
   vim.defer_fn(function()
     if transport.client then
       local msg = protocol.start_session(state.client_id, "MyProject")
+      for _, buf in ipairs(vim.api.nvim_list_bufs()) do
+        local name = vim.api.nvim_buf_get_name(buf)
+        local buftype = vim.api.nvim_get_option_value('buftype', { buf = buf })
+
+        if name ~= "" and buftype == "" and vim.api.nvim_buf_is_loaded(buf) then
+          -- Tag it
+          vim.b[buf].collab_enabled = true
+          vim.b[buf].collab_path = vim.fn.fnamemodify(name, ":."):gsub("\\", "/")
+
+          -- Register in state
+          state.path_to_buf[vim.b[buf].collab_path] = buf
+          state.file_revisions[vim.b[buf].collab_path] = 0
+        end
+      end
       transport.send(msg)
       enable_cursor_tracking()
       enable_file_tracking()

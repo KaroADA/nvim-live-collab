@@ -16,7 +16,7 @@ function M.start_session(client_id, project_name)
     local path = vim.api.nvim_buf_get_name(buf)
     if path == "" then goto continue end
 
-    path = vim.fn.fnamemodify(path, ":.")
+    path = vim.fn.fnamemodify(path, ":."):gsub("\\", "/")
     local content = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
 
     local my_cursor = nil
@@ -46,6 +46,15 @@ function M.start_session(client_id, project_name)
   }
 end
 
+function M.end_session(client_id)
+  return {
+    type = "END_SESSION",
+    client_id = client_id,
+    timestamp = timestamp(),
+    payload = { reason = "Host ended session" }
+  }
+end
+
 function M.join(client_id, username)
   return {
     type = "JOIN",
@@ -54,6 +63,17 @@ function M.join(client_id, username)
     payload = {
       username = username,
       client_version = "0.1.0"
+    }
+  }
+end
+
+function M.request_sync(client_id, path)
+  return {
+    type = "SYNC",
+    client_id = client_id,
+    timestamp = timestamp(),
+    payload = {
+      path = path
     }
   }
 end

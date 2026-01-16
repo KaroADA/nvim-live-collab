@@ -24,7 +24,18 @@ function M.on_join_good(payload)
     state.users[user.id] = user
   end
 
-  -- TODO: Send sync
+  state.known_server_files = {}
+  if payload.available_files then
+    for _, path in ipairs(payload.available_files) do
+      state.known_server_files[path] = true
+
+      -- Pre-register buffer
+      if not state.is_host then
+        state.register_file(path, nil, true)
+      end
+    end
+    vim.notify("Server has " .. #payload.available_files .. " files available.", vim.log.levels.INFO)
+  end
 end
 
 function M.on_user_left(payload)
@@ -84,6 +95,8 @@ function M.on_edit(sender_id, payload)
   local buf = state.get_buf_by_path(path)
 
   if not buf or not vim.api.nvim_buf_is_valid(buf) then return end
+  -- Ignore edits if the buffer is not visible
+  if vim.fn.bufwinnr(buf) == -1 then return end
 
   local op = payload.op
   local start_pos = op.start
