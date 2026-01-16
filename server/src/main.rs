@@ -150,6 +150,25 @@ async fn handle_message(
             guard.clients.remove(&msg.client_id);
             guard.users.remove(&msg.client_id);
         }
+        MessageContent::Edit(payload) => {
+            println!(
+                "Received edit from {}: rev.{}",
+                msg.client_id, payload.revision
+            );
+            if let Some(lines) = guard.files.get_mut(&payload.path) {
+                apply_edit(lines, &payload.op);
+            } else {
+                eprintln!("Warning: Received edit for unknown file: {}", payload.path);
+            }
+
+            let broadcast_msg = WebSocketMessage {
+                client_id: msg.client_id.clone(),
+                timestamp: msg.timestamp,
+                content: MessageContent::Edit(payload),
+            };
+
+            broadcast_message(&msg.client_id, &broadcast_msg, &mut guard.clients).await;
+        }
         _ => {
             println!("Unhandled message type from client: {}", msg.client_id);
         }
@@ -175,5 +194,74 @@ async fn send_message(
         if let Err(e) = socket.write_all(json.as_bytes()).await {
             eprintln!("Error sending message to {}: {}", client_id, e);
         }
+    }
+}
+
+async fn broadcast_message(
+    skip_client_id: &str,
+    msg: &WebSocketMessage,
+    clients: &mut HashMap<String, OwnedWriteHalf>,
+) {
+    let mut json = match serde_json::to_string(msg) {
+        Ok(j) => j,
+        Err(e) => {
+            eprintln!("Error serializing message: {}", e);
+            return;
+        }
+    };
+
+    json.push('\n');
+
+    for (client_id, socket) in clients.iter_mut() {
+        if client_id != skip_client_id {
+            if let Err(e) = socket.write_all(json.as_bytes()).await {
+                eprintln!("Error sending message to {}: {}", client_id, e);
+            }
+        }
+    }
+}
+
+fn apply_edit(lines: &mut Vec<String>, op: &EditOp) {
+    if op.start.row >= lines.len() || op.end.row >= lines.len() {
+        return;
+    }
+
+    let start_line = &lines[op.start.row];
+
+    let prefix = if op.start.col <= start_line.len() {
+        &start_line[..op.start.col]
+    } else {
+        start_line.as_str()
+    };
+
+    let end_line = &lines[op.end.row];
+
+    let suffix = if op.end.col <= end_line.len() {
+        &end_line[op.end.col..]
+    } else {
+        ""
+    };
+
+    let mut new_text = Vec::new();
+    if (op.text.is_empty()) {
+        new_text.push(format!("{}{}", prefix, suffix));
+    } else {
+        let first_row = format!("{}{}", prefix, op.text[0]);
+
+        new_text.push(first_row);
+
+        for i in 1..op.text.len() {
+            new_text.push(op.text[i].clone());
+        }
+
+        let last_index = new_text.len() - 1;
+        new_text[last_index] = format!("{}{}", new_text[last_index], suffix);
+    }
+
+    lines.splice(op.start.row..=op.end.row, new_text);
+
+    println!("File after edit:");
+    for (i, line) in lines.iter().enumerate() {
+        println!("{:03}: {}", i + 1, line);
     }
 }
