@@ -10,10 +10,16 @@ mod types;
 use tokio::net::tcp::OwnedWriteHalf;
 use types::*;
 
+struct FileData {
+    content: Vec<String>,
+    revision: u64,
+}
+
 struct AppState {
     clients: HashMap<String, OwnedWriteHalf>,
     users: HashMap<String, UserInfo>,
-    files: HashMap<String, Vec<String>>,
+    files: HashMap<String, FileData>,
+    current_cursors: HashMap<String, RemoteCursor>,
 }
 
 impl AppState {
@@ -22,6 +28,7 @@ impl AppState {
             clients: HashMap::new(),
             users: HashMap::new(),
             files: HashMap::new(),
+            current_cursors: HashMap::new(),
         }
     }
 }
@@ -136,7 +143,7 @@ async fn handle_message(
 
             let response = WebSocketMessage {
                 client_id: msg.client_id.clone(),
-                timestamp: timestamp,
+                timestamp,
                 content: MessageContent::JoinGood(JoinGoodPayload {
                     session_active: true,
                     active_users: guard.users.values().cloned().collect(),
@@ -164,9 +171,44 @@ async fn handle_message(
             }
 
             for file in payload.files {
-                guard.files.insert(file.path, file.content);
+                guard.files.insert(
+                    file.path,
+                    FileData {
+                        content: file.content,
+                        revision: 0,
+                    },
+                );
             }
         }
+        MessageContent::Sync(payload) => {
+            println!(
+                "Received sync request from {} for file: {}",
+                msg.client_id, payload.path
+            );
+            if let Some(file) = guard.files.get(&payload.path) {
+                let timestamp = SystemTime::now()
+                    .duration_since(UNIX_EPOCH)
+                    .expect("Time went backwards")
+                    .as_millis() as u64;
+
+                let response = WebSocketMessage {
+                    client_id: msg.client_id.clone(),
+                    timestamp,
+                    content: MessageContent::Sync(SyncPayload {
+                        path: payload.path.clone(),
+                        revision: Some(file.revision),
+                        content: Some(file.content.clone()),
+                        is_writeable: Some(true),
+                        cursors: Some(guard.current_cursors.values().cloned().collect()),
+                    }),
+                };
+
+                send_message(&msg.client_id, &response, &mut guard.clients).await;
+            } else {
+                eprintln!("Warning: Sync requested for unknown file: {}", payload.path);
+            }
+        }
+
         MessageContent::EndSession(payload) => {
             println!(
                 "User ended session: {} Reason: {}",
@@ -180,8 +222,8 @@ async fn handle_message(
                 "Received edit from {}: rev.{}",
                 msg.client_id, payload.revision
             );
-            if let Some(lines) = guard.files.get_mut(&payload.path) {
-                apply_edit(lines, &payload.op);
+            if let Some(file) = guard.files.get_mut(&payload.path) {
+                apply_edit(&mut file.content, &payload.op);
             } else {
                 eprintln!("Warning: Received edit for unknown file: {}", payload.path);
             }
@@ -196,6 +238,17 @@ async fn handle_message(
         }
         MessageContent::Cursor(payload) => {
             println!("Received cursor update from {}.", msg.client_id);
+
+            let remote_cursor = RemoteCursor {
+                client_id: msg.client_id.clone(),
+                pos: payload.pos.clone(),
+                selection: payload.selection.clone(),
+            };
+
+            guard
+                .current_cursors
+                .insert(msg.client_id.clone(), remote_cursor);
+
             let broadcast_msg = WebSocketMessage {
                 client_id: msg.client_id.clone(),
                 timestamp: msg.timestamp,
