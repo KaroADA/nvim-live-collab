@@ -169,6 +169,15 @@ async fn handle_message(
 
             broadcast_message(&msg.client_id, &broadcast_msg, &mut guard.clients).await;
         }
+        MessageContent::Cursor(payload) => {
+            println!("Received cursor update from {}.", msg.client_id);
+            let broadcast_msg = WebSocketMessage {
+                client_id: msg.client_id.clone(),
+                timestamp: msg.timestamp,
+                content: MessageContent::Cursor(payload),
+            };
+            broadcast_message(&msg.client_id, &broadcast_msg, &mut guard.clients).await;
+        }
         _ => {
             println!("Unhandled message type from client: {}", msg.client_id);
         }
