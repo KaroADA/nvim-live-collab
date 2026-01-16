@@ -93,6 +93,21 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 }
 
+fn get_random_color() -> String {
+    let colors = [
+        "#FF0000", "#00FF00", "#0000FF", "#FFFF00", "#FF00FF", "#00FFFF", "#FFA500", "#800080",
+        "#008080", "#FFC0CB",
+    ];
+
+    let index = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or(std::time::Duration::from_secs(0))
+        .subsec_nanos() as usize
+        % colors.len();
+
+    colors[index].to_string()
+}
+
 async fn handle_message(
     msg: WebSocketMessage,
     app_state: SharedAppState,
@@ -106,7 +121,7 @@ async fn handle_message(
             let user_info = UserInfo {
                 id: msg.client_id.clone(),
                 username: payload.username.clone(),
-                color: "#000000".to_string(),
+                color: get_random_color(),
             };
             guard.users.insert(msg.client_id.clone(), user_info.clone());
             if let Some(writer) = socket_writer.take() {
