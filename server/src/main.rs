@@ -222,7 +222,12 @@ async fn broadcast_message(
 }
 
 fn apply_edit(lines: &mut Vec<String>, op: &EditOp) {
-    if op.start.row >= lines.len() || op.end.row >= lines.len() {
+    if op.start.row > lines.len() || op.end.row > lines.len() {
+        return;
+    }
+
+    if lines.is_empty() {
+        lines.extend(op.text.clone());
         return;
     }
 
@@ -234,12 +239,15 @@ fn apply_edit(lines: &mut Vec<String>, op: &EditOp) {
         start_line.as_str()
     };
 
-    let end_line = &lines[op.end.row];
-
-    let suffix = if op.end.col <= end_line.len() {
-        &end_line[op.end.col..]
-    } else {
+    let suffix = if op.end.row == lines.len() {
         ""
+    } else {
+        let end_line = &lines[op.end.row];
+        if op.end.col <= end_line.len() {
+            &end_line[op.end.col..]
+        } else {
+            ""
+        }
     };
 
     let mut new_text = Vec::new();
@@ -258,7 +266,11 @@ fn apply_edit(lines: &mut Vec<String>, op: &EditOp) {
         new_text[last_index] = format!("{}{}", new_text[last_index], suffix);
     }
 
-    lines.splice(op.start.row..=op.end.row, new_text);
+    if op.end.row == lines.len() {
+        lines.splice(op.start.row..op.end.row, new_text);
+    } else {
+        lines.splice(op.start.row..=op.end.row, new_text);
+    }
 
     println!("File after edit:");
     for (i, line) in lines.iter().enumerate() {
