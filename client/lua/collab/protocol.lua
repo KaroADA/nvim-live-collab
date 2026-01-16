@@ -58,6 +58,23 @@ function M.join(client_id, username)
   }
 end
 
+function M.edit(client_id, path, start_row, start_col, end_row, end_col, text_lines, revision)
+  return {
+    type = "EDIT",
+    client_id = client_id,
+    timestamp = timestamp(),
+    payload = {
+      path = path,
+      revision = revision,
+      op = {
+        start = { row = start_row, col = start_col },
+        ["end"] = { row = end_row, col = end_col },
+        text = text_lines
+      }
+    }
+  }
+end
+
 function M.cursor(client_id, path, line, col)
   return {
     type = "CURSOR",

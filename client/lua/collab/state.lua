@@ -4,6 +4,9 @@ M.client_id = "user-" .. tostring(math.random(1000, 9999))
 M.username = "Unknown"
 M.is_host = false
 
+-- When TRUE, the on_bytes listener will ignore changes.
+M.is_applying_edit = false
+
 -- Map file path to buffer id
 M.path_to_buf = {}
 
@@ -36,7 +39,11 @@ function M.register_file(path, content, create_if_missing)
   end
 
   if buf and content then
-    vim.api.nvim_buf_set_lines(buf, 0, -1, false, content)
+    local was_applying = M.is_applying_edit
+    M.is_applying_edit = true
+    pcall(vim.api.nvim_buf_set_lines, buf, 0, -1, false, content)
+    M.is_applying_edit = was_applying
+    vim.bo[buf].modifiable = true
   end
 
   return buf
