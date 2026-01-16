@@ -144,10 +144,20 @@ async fn handle_message(
                 }),
             };
 
+            println!("Sending JoinGood to {}", msg.client_id);
+            println!("{:#?}", response);
+
             send_message(&msg.client_id, &response, &mut guard.clients).await;
         }
         MessageContent::StartSession(payload) => {
             println!("User started session: {}", msg.client_id);
+
+            let user_info = UserInfo {
+                id: msg.client_id.clone(),
+                username: msg.client_id.clone(),
+                color: get_random_color(),
+            };
+            guard.users.insert(msg.client_id.clone(), user_info);
 
             if let Some(w) = socket_writer.take() {
                 guard.clients.insert(msg.client_id.clone(), w);
