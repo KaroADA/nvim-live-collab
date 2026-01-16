@@ -73,6 +73,13 @@ local function attach_to_buffer(buf)
       else
         new_end_col = new_end_col_offset
       end
+      -- When pasting/restoring, new_end_row might equal line_count.
+      local line_count = vim.api.nvim_buf_line_count(buf_handle)
+      if new_end_row >= line_count then
+        new_end_row = line_count - 1
+        local last_line = vim.api.nvim_buf_get_lines(buf_handle, new_end_row, new_end_row + 1, false)[1] or ""
+        new_end_col = #last_line
+      end
 
       local ok, new_text = pcall(vim.api.nvim_buf_get_text,
         buf_handle,
@@ -101,6 +108,11 @@ local function attach_to_buffer(buf)
           tick
         )
         transport.send(msg)
+      else
+        vim.notify(string.format(
+          "Collab Sync Error!\nRange: (%d,%d) -> (%d,%d)\nBuffer Lines: %d\nError: %s",
+          start_row, start_col, new_end_row, new_end_col, line_count, result
+        ), vim.log.levels.ERROR)
       end
     end,
 
