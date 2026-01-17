@@ -4,7 +4,7 @@ local function timestamp()
   return os.time() * 1000
 end
 
-function M.start_session(client_id, project_name)
+function M.start_session(client_id, project_name, username)
   local files = {}
   local current_buf = vim.api.nvim_get_current_buf()
 
@@ -41,6 +41,7 @@ function M.start_session(client_id, project_name)
     timestamp = timestamp(),
     payload = {
       project_name = project_name,
+      username = username,
       files = files
     }
   }

@@ -4,18 +4,16 @@ local ns_id = vim.api.nvim_create_namespace("collab_cursors")
 local active_cursors = {}
 local is_visible = true
 
-local palette = { "Identifier", "String", "Constant", "Statement", "PreProc", "Type" }
-
 function M.get_users()
   local users = {}
-  for name, _ in pairs(active_cursors) do
-    table.insert(users, name)
+  for _, data in pairs(active_cursors) do
+    table.insert(users, data.username)
   end
   return users
 end
 
-local function ensure_hl_groups(user, color_hex)
-  local safe_user = user:gsub("%W", "_")
+local function ensure_hl_groups(client_id, color_hex)
+  local safe_user = client_id:gsub("%W", "_")
   local user_hl = "CollabUser_" .. safe_user
   local block_hl = "CollabBlock_" .. safe_user
   local sel_hl = "CollabSel_" .. safe_user
@@ -25,10 +23,10 @@ local function ensure_hl_groups(user, color_hex)
   return user_hl, block_hl, sel_hl
 end
 
-function M.setup_cursor(user, line, col, selection, color_hex)
-  M.remove_cursor_ui(user)
+function M.setup_cursor(client_id, username, line, col, selection, color_hex)
+  M.remove_cursor_ui(client_id)
   color_hex = color_hex or "#FFFFFF"
-  local user_hl, block_hl, sel_hl = ensure_hl_groups(user, color_hex)
+  local user_hl, block_hl, sel_hl = ensure_hl_groups(client_id, color_hex)
 
   local mark_id = nil
   local label_id = nil
@@ -58,13 +56,13 @@ function M.setup_cursor(user, line, col, selection, color_hex)
     })
 
     label_id = vim.api.nvim_buf_set_extmark(0, ns_id, line, 0, {
-      virt_text = { { "  " .. user, user_hl } },
+      virt_text = { { " " .. username, user_hl } },
       virt_text_pos = "eol",
       hl_mode = "combine",
     })
   end
 
-  active_cursors[user] = {
+  active_cursors[client_id] = {
     mark_id = mark_id,
     label_id = label_id,
     selection_id = selection_id,
@@ -72,23 +70,23 @@ function M.setup_cursor(user, line, col, selection, color_hex)
   }
 end
 
-function M.remove_cursor_ui(user)
-  if active_cursors[user] and active_cursors[user].mark_id then
-    pcall(vim.api.nvim_buf_del_extmark, 0, ns_id, active_cursors[user].mark_id)
-    pcall(vim.api.nvim_buf_del_extmark, 0, ns_id, active_cursors[user].label_id)
-    pcall(vim.api.nvim_buf_del_extmark, 0, ns_id, active_cursors[user].selection_id)
-    active_cursors[user].mark_id = nil
-    active_cursors[user].label_id = nil
-    active_cursors[user].selection_id = nil
+function M.remove_cursor_ui(client_id)
+  if active_cursors[client_id] and active_cursors[client_id].mark_id then
+    pcall(vim.api.nvim_buf_del_extmark, 0, ns_id, active_cursors[client_id].mark_id)
+    pcall(vim.api.nvim_buf_del_extmark, 0, ns_id, active_cursors[client_id].label_id)
+    pcall(vim.api.nvim_buf_del_extmark, 0, ns_id, active_cursors[client_id].selection_id)
+    active_cursors[client_id].mark_id = nil
+    active_cursors[client_id].label_id = nil
+    active_cursors[client_id].selection_id = nil
   end
 end
 
 function M.hide_all()
   if not is_visible then return end
-  for user, data in pairs(active_cursors) do
+  for client_id, data in pairs(active_cursors) do
     local pos = vim.api.nvim_buf_get_extmark_by_id(0, ns_id, data.mark_id, {})
     if pos and #pos > 0 then data.last_pos = pos end
-    M.remove_cursor_ui(user)
+    M.remove_cursor_ui(client_id)
   end
   is_visible = false
   print("Collab: Cursors hidden")
@@ -97,8 +95,8 @@ end
 function M.show_all()
   if is_visible then return end
   is_visible = true
-  for user, data in pairs(active_cursors) do
-    M.setup_cursor(user, data.last_pos[1], data.last_pos[2])
+  for client_id, data in pairs(active_cursors) do
+    M.setup_cursor(client_id, data.username, data.last_pos[1], data.last_pos[2])
   end
   print("Collab: Cursors shown")
 end

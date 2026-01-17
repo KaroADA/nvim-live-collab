@@ -19,9 +19,11 @@ end
 vim.api.nvim_create_user_command("CollabHost", function(opts)
   require("collab").start_host(opts.args)
 end, { nargs = "?" })
-
 vim.api.nvim_create_user_command("CollabJoin", function(opts)
   require("collab").join_session(opts.args)
+end, { nargs = "?" })
+vim.api.nvim_create_user_command("CollabName", function(opts)
+  require("collab").change_username(opts.args)
 end, { nargs = "?" })
 
 vim.api.nvim_create_user_command("CollabHide", function() require("collab.cursor").hide_all() end, {})

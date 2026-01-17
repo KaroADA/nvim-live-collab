@@ -1,4 +1,7 @@
 local M = {}
+math.randomseed(os.time() + vim.fn.getpid())
+-- Pop a few random numbers to "warm up" the generator (Lua 5.1 quirk)
+math.random(); math.random(); math.random()
 
 M.client_id = "user-" .. tostring(math.random(1000, 9999))
 M.username = "Unknown"
@@ -13,6 +16,31 @@ M.file_revisions = {}
 M.known_server_files = {}
 
 M.users = {}
+
+local config_file = vim.fn.stdpath("data") .. "/collab_me.json"
+
+function M.load_username_from_disk()
+  local f = io.open(config_file, "r")
+  if not f then return nil end
+
+  local content = f:read("*a")
+  f:close()
+
+  local ok, data = pcall(vim.json.decode, content)
+  if ok and data.username then
+    return data.username
+  end
+  return nil
+end
+
+function M.save_username_to_disk(name)
+  local f = io.open(config_file, "w")
+  if f then
+    local data = vim.json.encode({ username = name })
+    f:write(data)
+    f:close()
+  end
+end
 
 function M.get_buf_by_path(path)
   if M.path_to_buf[path] and vim.api.nvim_buf_is_valid(M.path_to_buf[path]) then

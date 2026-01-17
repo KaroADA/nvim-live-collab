@@ -127,6 +127,7 @@ function M.on_cursor(sender_id, payload)
   if buf and buf == current_buf then
     cursor_ui.setup_cursor(
       sender_id,
+      state.users[sender_id].username or sender_id,
       payload.pos[1],
       payload.pos[2],
       payload.selection,

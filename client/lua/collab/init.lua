@@ -8,6 +8,32 @@ local state = require("collab.state")
 local HOST = "127.0.0.1"
 local PORT = 8080
 
+local function resolve_username(input_arg, callback)
+  -- If argument provided, use it and save it
+  if input_arg and input_arg ~= "" then
+    state.save_username_to_disk(input_arg)
+    callback(input_arg)
+    return
+  end
+
+  -- Try loading from disk
+  local stored = state.load_username_from_disk()
+  if stored and stored ~= "" then
+    callback(stored)
+    return
+  end
+
+  -- Prompt the user
+  vim.ui.input({ prompt = "Enter your username for Collab: " }, function(input)
+    if not input or input == "" then
+      vim.notify("Username required to join session.", vim.log.levels.ERROR)
+      return
+    end
+    state.save_username_to_disk(input)
+    callback(input)
+  end)
+end
+
 function M.get_user_completion(arg_lead)
   local matches = {}
   for _, user in pairs(state.users) do
@@ -241,61 +267,86 @@ local function enable_file_tracking()
   })
 end
 
-function M.start_host(username)
-  state.is_host = true
-  state.username = (username and username ~= "") and username or "Host"
+function M.start_host(input_arg)
+  resolve_username(input_arg, function(username)
+    state.is_host = true
+    state.username = username
+    state.is_applying_edit = false
 
-  vim.notify("Collab: Connecting as Host...", vim.log.levels.INFO)
+    state.users[state.client_id] = {
+      id = state.client_id,
+      username = username,
+      color = "#FFFFFF" -- Will be updated if server sends it back
+    }
 
-  transport.connect(HOST, PORT, function(msg)
-    handlers.handle_message(msg)
-  end)
+    vim.notify("Collab: Connecting as Host (" .. username .. ")...", vim.log.levels.INFO)
 
-  -- After 500ms check if connection was ok, then send StartSession
-  vim.defer_fn(function()
-    if transport.client then
-      local msg = protocol.start_session(state.client_id, "MyProject")
-      for _, buf in ipairs(vim.api.nvim_list_bufs()) do
-        local name = vim.api.nvim_buf_get_name(buf)
-        local buftype = vim.api.nvim_get_option_value('buftype', { buf = buf })
+    transport.connect(HOST, PORT, function(msg)
+      handlers.handle_message(msg)
+    end)
 
-        if name ~= "" and buftype == "" and vim.api.nvim_buf_is_loaded(buf) then
-          -- Tag it
-          vim.b[buf].collab_enabled = true
-          vim.b[buf].collab_path = vim.fn.fnamemodify(name, ":."):gsub("\\", "/")
-
-          -- Register in state
-          state.path_to_buf[vim.b[buf].collab_path] = buf
-          state.file_revisions[vim.b[buf].collab_path] = 0
+    vim.defer_fn(function()
+      if transport.client then
+        local msg = protocol.start_session(state.client_id, "MyProject", username)
+        for _, buf in ipairs(vim.api.nvim_list_bufs()) do
+          local name = vim.api.nvim_buf_get_name(buf)
+          local buftype = vim.api.nvim_get_option_value('buftype', { buf = buf })
+          if name ~= "" and buftype == "" and vim.api.nvim_buf_is_loaded(buf) then
+            vim.b[buf].collab_enabled = true
+            vim.b[buf].collab_path = vim.fn.fnamemodify(name, ":."):gsub("\\", "/")
+            state.path_to_buf[vim.b[buf].collab_path] = buf
+            state.file_revisions[vim.b[buf].collab_path] = 0
+          end
         end
+
+        transport.send(msg)
+        enable_cursor_tracking()
+        enable_file_tracking()
+        vim.notify("Collab: Session initialized.", vim.log.levels.INFO)
       end
-      transport.send(msg)
-      enable_cursor_tracking()
-      enable_file_tracking()
-      vim.notify("Collab: Session initialized.", vim.log.levels.INFO)
-    end
-  end, 500)
+    end, 500)
+  end)
 end
 
-function M.join_session(username)
-  state.is_host = false
-  state.username = (username and username ~= "") and username or "Guest"
+function M.join_session(input_arg)
+  resolve_username(input_arg, function(username)
+    state.is_host = false
+    state.username = username
+    state.is_applying_edit = false
 
-  vim.notify("Collab: Connecting as Guest...", vim.log.levels.INFO)
+    vim.notify("Collab: Connecting as Guest (" .. username .. ")...", vim.log.levels.INFO)
 
-  transport.connect(HOST, PORT, function(msg)
-    handlers.handle_message(msg)
+    transport.connect(HOST, PORT, function(msg)
+      handlers.handle_message(msg)
+    end)
+
+    vim.defer_fn(function()
+      if transport.client then
+        local msg = protocol.join(state.client_id, state.username)
+        transport.send(msg)
+
+        enable_cursor_tracking()
+        enable_file_tracking()
+        vim.notify("Collab: Join request sent.", vim.log.levels.INFO)
+      end
+    end, 500)
   end)
+end
 
-  vim.defer_fn(function()
-    if transport.client then
-      local msg = protocol.join(state.client_id, state.username)
-      transport.send(msg)
-      enable_cursor_tracking()
-      enable_file_tracking()
-      vim.notify("Collab: Join request sent.", vim.log.levels.INFO)
-    end
-  end, 500)
+function M.change_username(new_name)
+  if new_name and new_name ~= "" then
+    state.save_username_to_disk(new_name)
+    state.username = new_name
+    vim.notify("Collab: Username updated to '" .. new_name .. "'", vim.log.levels.INFO)
+  else
+    vim.ui.input({ prompt = "New Username: ", default = state.username }, function(input)
+      if input and input ~= "" then
+        state.save_username_to_disk(input)
+        state.username = input
+        vim.notify("Collab: Username updated to '" .. input .. "'", vim.log.levels.INFO)
+      end
+    end)
+  end
 end
 
 return M
