@@ -13,13 +13,13 @@ use types::*;
 struct FileData {
     content: Vec<String>,
     revision: u64,
+    current_cursors: HashMap<String, RemoteCursor>,
 }
 
 struct AppState {
     clients: HashMap<String, OwnedWriteHalf>,
     users: HashMap<String, UserInfo>,
     files: HashMap<String, FileData>,
-    current_cursors: HashMap<String, RemoteCursor>,
 }
 
 impl AppState {
@@ -28,7 +28,6 @@ impl AppState {
             clients: HashMap::new(),
             users: HashMap::new(),
             files: HashMap::new(),
-            current_cursors: HashMap::new(),
         }
     }
 }
@@ -95,6 +94,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 let mut state = app_state.lock().await;
                 state.clients.remove(&id);
                 state.users.remove(&id);
+
+                for file in state.files.values_mut() {
+                    file.current_cursors.remove(&id);
+                }
             }
         });
     }
@@ -182,11 +185,23 @@ async fn handle_message(
             }
 
             for file in payload.files {
+                let mut file_cursors = HashMap::new();
+
+                if let Some(host_local_cursor) = file.my_cursor {
+                    let remote = RemoteCursor {
+                        client_id: msg.client_id.clone(),
+                        pos: host_local_cursor.pos,
+                        selection: host_local_cursor.selection,
+                    };
+                    file_cursors.insert(msg.client_id.clone(), remote);
+                }
+
                 guard.files.insert(
                     file.path,
                     FileData {
                         content: file.content,
                         revision: 0,
+                        current_cursors: file_cursors,
                     },
                 );
             }
@@ -210,7 +225,7 @@ async fn handle_message(
                         revision: Some(file.revision),
                         content: Some(file.content.clone()),
                         is_writeable: Some(true),
-                        cursors: Some(guard.current_cursors.values().cloned().collect()),
+                        cursors: Some(file.current_cursors.values().cloned().collect()),
                     }),
                 };
 
@@ -227,6 +242,10 @@ async fn handle_message(
             );
             guard.clients.remove(&msg.client_id);
             guard.users.remove(&msg.client_id);
+
+            for file in guard.files.values_mut() {
+                file.current_cursors.remove(&msg.client_id);
+            }
         }
         MessageContent::Edit(payload) => {
             println!(
@@ -256,9 +275,10 @@ async fn handle_message(
                 selection: payload.selection.clone(),
             };
 
-            guard
-                .current_cursors
-                .insert(msg.client_id.clone(), remote_cursor);
+            if let Some(file) = guard.files.get_mut(&payload.path) {
+                file.current_cursors
+                    .insert(msg.client_id.clone(), remote_cursor);
+            }
 
             let broadcast_msg = WebSocketMessage {
                 client_id: msg.client_id.clone(),
