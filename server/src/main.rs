@@ -43,13 +43,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let app_state: SharedAppState = Arc::new(Mutex::new(AppState::new()));
 
     loop {
-        let (mut socket, addr) = listener.accept().await?;
+        let (socket, addr) = listener.accept().await?;
         println!("New connection from: {}", addr);
 
         let app_state = app_state.clone();
 
         tokio::spawn(async move {
-            let (mut reader, mut writer) = socket.into_split();
+            let (reader, writer) = socket.into_split();
 
             let mut client_id: Option<String> = None;
             let mut socket_writer = Some(writer);
@@ -59,7 +59,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             let mut line = String::new();
             loop {
                 line.clear();
-                let bytes_read = match buf_reader.read_line(&mut line).await {
+                match buf_reader.read_line(&mut line).await {
                     Ok(0) => {
                         println!("Client disconnected: {:?}", client_id);
                         break;
@@ -311,10 +311,12 @@ async fn broadcast_message(
     json.push('\n');
 
     for (client_id, socket) in clients.iter_mut() {
-        if client_id != skip_client_id {
-            if let Err(e) = socket.write_all(json.as_bytes()).await {
-                eprintln!("Error sending message to {}: {}", client_id, e);
-            }
+        if client_id == skip_client_id {
+            continue;
+        }
+
+        if let Err(e) = socket.write_all(json.as_bytes()).await {
+            eprintln!("Error sending message to {}: {}", client_id, e);
         }
     }
 }
@@ -349,7 +351,7 @@ fn apply_edit(lines: &mut Vec<String>, op: &EditOp) {
     };
 
     let mut new_text = Vec::new();
-    if (op.text.is_empty()) {
+    if op.text.is_empty() {
         new_text.push(format!("{}{}", prefix, suffix));
     } else {
         let first_row = format!("{}{}", prefix, op.text[0]);
