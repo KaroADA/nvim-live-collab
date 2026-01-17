@@ -27,6 +27,15 @@ end, { nargs = "?" })
 vim.api.nvim_create_user_command("CollabHide", function() require("collab.cursor").hide_all() end, {})
 vim.api.nvim_create_user_command("CollabShow", function() require("collab.cursor").show_all() end, {})
 
+vim.api.nvim_create_user_command("CollabJump", function(opts)
+  require("collab").jump_to_user(opts.args)
+end, {
+  nargs = 1,
+  complete = function(ArgLead, CmdLine, CursorPos)
+    return require("collab").get_user_completion(ArgLead)
+  end
+})
+
 vim.api.nvim_create_user_command("CollabReload", function()
   for k in pairs(package.loaded) do
     if k:match("^collab") then

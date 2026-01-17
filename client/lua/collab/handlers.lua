@@ -7,6 +7,8 @@ function M.handle_message(msg)
 
   if msg.type == "JOIN_GOOD" then
     M.on_join_good(msg.payload)
+  elseif msg.type == "USER_JOINED" then
+    M.on_user_joined(msg.payload)
   elseif msg.type == "USER_LEFT" then
     M.on_user_left(msg.payload)
   elseif msg.type == "SYNC" then
@@ -36,6 +38,15 @@ function M.on_join_good(payload)
     end
     vim.notify("Server has " .. #payload.available_files .. " files available.", vim.log.levels.INFO)
   end
+end
+
+function M.on_user_joined(payload)
+  local user = payload.user
+  if not user then return end
+
+  vim.notify(user.username .. " joined the session.", vim.log.levels.INFO)
+
+  state.users[user.id] = user
 end
 
 function M.on_user_left(payload)
@@ -76,6 +87,14 @@ end
 
 function M.on_cursor(sender_id, payload)
   if sender_id == state.client_id then return end
+
+  if state.users[sender_id] then
+    state.users[sender_id].cursor = {
+      path = payload.path,
+      line = payload.pos[1],
+      col = payload.pos[2]
+    }
+  end
 
   local path = payload.path
   local buf = state.get_buf_by_path(path)

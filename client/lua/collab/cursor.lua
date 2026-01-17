@@ -27,20 +27,30 @@ function M.setup_cursor(user, line, col)
   vim.api.nvim_set_hl(0, block_hl, { bg = color, fg = 0 })
 
   local mark_id = nil
+  local label_id = nil
   if is_visible then
     mark_id = vim.api.nvim_buf_set_extmark(0, ns_id, line, col, {
-      virt_text = { { " ", block_hl }, { " " .. user, user_hl } },
+      virt_text = { { " ", block_hl } },
       virt_text_pos = "overlay",
+      priority = 100,
+    })
+
+    label_id = vim.api.nvim_buf_set_extmark(0, ns_id, line, 0, {
+      virt_text = { { "  " .. user, user_hl } },
+      virt_text_pos = "eol",
+      hl_mode = "combine",
     })
   end
 
-  active_cursors[user] = { mark_id = mark_id, last_pos = { line, col } }
+  active_cursors[user] = { mark_id = mark_id, label_id = label_id, last_pos = { line, col } }
 end
 
 function M.remove_cursor_ui(user)
   if active_cursors[user] and active_cursors[user].mark_id then
     pcall(vim.api.nvim_buf_del_extmark, 0, ns_id, active_cursors[user].mark_id)
+    pcall(vim.api.nvim_buf_del_extmark, 0, ns_id, active_cursors[user].label_id)
     active_cursors[user].mark_id = nil
+    active_cursors[user].label_id = nil
   end
 end
 

@@ -8,16 +8,65 @@ local state = require("collab.state")
 local HOST = "127.0.0.1"
 local PORT = 8080
 
+function M.get_user_completion(arg_lead)
+  local matches = {}
+  for _, user in pairs(state.users) do
+    if user.username and user.username:find(arg_lead, 1, true) then
+      table.insert(matches, user.username)
+    end
+  end
+  return matches
+end
+
+function M.jump_to_user(username)
+  local target_user = nil
+
+  -- Find user by name
+  for _, user in pairs(state.users) do
+    if user.username == username then
+      target_user = user
+      break
+    end
+  end
+
+  if not target_user then
+    vim.notify("User '" .. username .. "' not found.", vim.log.levels.WARN)
+    return
+  end
+
+  if not target_user.cursor then
+    vim.notify("User '" .. username .. "' has not moved yet.", vim.log.levels.WARN)
+    return
+  end
+
+  local cursor = target_user.cursor
+  local buf = state.register_file(cursor.path, nil, true)
+
+  if buf and vim.api.nvim_buf_is_valid(buf) then
+    vim.api.nvim_set_current_buf(buf)
+
+    local line_count = vim.api.nvim_buf_line_count(buf)
+    local target_row = cursor.line + 1
+    if target_row > line_count then target_row = line_count end
+
+    vim.api.nvim_win_set_cursor(0, { target_row, cursor.col })
+    vim.cmd("normal! zz") -- Center screen
+    vim.notify("Jumped to " .. username, vim.log.levels.INFO)
+  else
+    vim.notify("Could not open buffer for path: " .. cursor.path, vim.log.levels.ERROR)
+  end
+end
+
 local function enable_cursor_tracking()
   local group = vim.api.nvim_create_augroup("CollabActive", { clear = true })
   local timer = assert((vim.uv or vim.loop).new_timer())
-  local THROTTLE_MS = 200
+  local THROTTLE_MS = 100
   local pending_update = false
 
   local function send_cursor_payload()
     if not transport.client then return end
     local buf = vim.api.nvim_get_current_buf()
-    if vim.bo[buf].buftype ~= "" then return end
+    if not vim.b[buf].collab_enabled then return end
     local path = vim.b[buf].collab_path or vim.fn.fnamemodify(vim.api.nvim_buf_get_name(buf), ":.")
     path = path:gsub("\\", "/")
     if path == "" then return end
