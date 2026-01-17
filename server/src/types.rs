@@ -85,6 +85,11 @@ pub struct JoinGoodPayload {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UserJoinedPayload {
+    pub user: UserInfo,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UserLeftPayload {
     pub user_id: String,
     pub username: String,
@@ -136,6 +141,8 @@ pub enum MessageContent {
     Join(JoinPayload),
     #[serde(rename = "JOIN_GOOD")]
     JoinGood(JoinGoodPayload),
+    #[serde(rename = "USER_JOINED")]
+    UserJoined(UserJoinedPayload),
     #[serde(rename = "USER_LEFT")]
     UserLeft(UserLeftPayload),
     #[serde(rename = "SYNC")]

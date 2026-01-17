@@ -14,21 +14,43 @@ function M.get_users()
   return users
 end
 
-function M.setup_cursor(user, line, col)
-  M.remove_cursor_ui(user)
-  local color_idx = (#user % #palette) + 1
-  local base_hl = palette[color_idx]
-  local hl_data = vim.api.nvim_get_hl(0, { name = base_hl, link = false })
-  local color = hl_data.fg or 0xFFFFFF
+local function ensure_hl_groups(user, color_hex)
+  local safe_user = user:gsub("%W", "_")
+  local user_hl = "CollabUser_" .. safe_user
+  local block_hl = "CollabBlock_" .. safe_user
+  local sel_hl = "CollabSel_" .. safe_user
+  vim.api.nvim_set_hl(0, user_hl, { fg = color_hex, italic = true, default = false })
+  vim.api.nvim_set_hl(0, block_hl, { bg = color_hex, fg = "#000000", default = false })
+  vim.api.nvim_set_hl(0, sel_hl, { bg = color_hex, default = false })
+  return user_hl, block_hl, sel_hl
+end
 
-  local user_hl = "CollabUser_" .. user
-  local block_hl = "CollabBlock_" .. user
-  vim.api.nvim_set_hl(0, user_hl, { fg = color, italic = true })
-  vim.api.nvim_set_hl(0, block_hl, { bg = color, fg = 0 })
+function M.setup_cursor(user, line, col, selection, color_hex)
+  M.remove_cursor_ui(user)
+  color_hex = color_hex or "#FFFFFF"
+  local user_hl, block_hl, sel_hl = ensure_hl_groups(user, color_hex)
 
   local mark_id = nil
   local label_id = nil
+  local selection_id = nil
+
   if is_visible then
+    if selection and selection ~= vim.NIL then
+      local s_row, s_col = selection.start[1], selection.start[2]
+      local e_row, e_col = selection["end"][1], selection["end"][2]
+      local line_count = vim.api.nvim_buf_line_count(0)
+      if s_row < line_count and e_row < line_count then
+        local lines = vim.api.nvim_buf_get_lines(0, e_row, e_row + 1, false)
+        local end_line_len = lines[1] and #lines[1] or 0
+        if e_col > end_line_len then e_col = end_line_len end
+        _, selection_id = pcall(vim.api.nvim_buf_set_extmark, 0, ns_id, s_row, s_col, {
+          end_row = e_row,
+          end_col = e_col,
+          hl_group = sel_hl,
+          priority = 90,
+        })
+      end
+    end
     mark_id = vim.api.nvim_buf_set_extmark(0, ns_id, line, col, {
       virt_text = { { " ", block_hl } },
       virt_text_pos = "overlay",
@@ -42,15 +64,22 @@ function M.setup_cursor(user, line, col)
     })
   end
 
-  active_cursors[user] = { mark_id = mark_id, label_id = label_id, last_pos = { line, col } }
+  active_cursors[user] = {
+    mark_id = mark_id,
+    label_id = label_id,
+    selection_id = selection_id,
+    last_pos = { line, col }
+  }
 end
 
 function M.remove_cursor_ui(user)
   if active_cursors[user] and active_cursors[user].mark_id then
     pcall(vim.api.nvim_buf_del_extmark, 0, ns_id, active_cursors[user].mark_id)
     pcall(vim.api.nvim_buf_del_extmark, 0, ns_id, active_cursors[user].label_id)
+    pcall(vim.api.nvim_buf_del_extmark, 0, ns_id, active_cursors[user].selection_id)
     active_cursors[user].mark_id = nil
     active_cursors[user].label_id = nil
+    active_cursors[user].selection_id = nil
   end
 end
 

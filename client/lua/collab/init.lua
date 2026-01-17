@@ -71,11 +71,34 @@ local function enable_cursor_tracking()
     path = path:gsub("\\", "/")
     if path == "" then return end
     local cursor = vim.api.nvim_win_get_cursor(0)
-    local msg = protocol.cursor(state.client_id, path, cursor[1] - 1, cursor[2])
+
+    local selection = nil
+    local mode = vim.api.nvim_get_mode().mode
+    if mode == "v" or mode == "V" or mode == "\22" then
+      local v_start = vim.fn.getpos("v")
+      local v_end = vim.fn.getpos(".")
+      local start_row = v_start[2] - 1
+      local start_col = v_start[3] - 1
+      local end_row = v_end[2] - 1
+      local end_col = v_end[3] - 1
+      if start_row > end_row or (start_row == end_row and start_col > end_col) then
+        start_row, start_col, end_row, end_col = end_row, end_col, start_row, start_col
+      end
+      if mode == "V" then
+        start_col = 0
+        end_col = 2147483647
+      end
+      selection = {
+        start = { start_row, start_col },
+        ["end"] = { end_row, end_col }
+      }
+    end
+
+    local msg = protocol.cursor(state.client_id, path, cursor[1] - 1, cursor[2], selection)
     transport.send(msg)
   end
 
-  vim.api.nvim_create_autocmd({ "CursorMoved", "CursorMovedI" }, {
+  vim.api.nvim_create_autocmd({ "CursorMoved", "CursorMovedI", "ModeChanged" }, {
     group = group,
     callback = function()
       if timer:is_active() then

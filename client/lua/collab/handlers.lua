@@ -20,6 +20,13 @@ function M.handle_message(msg)
   end
 end
 
+local function get_user_color(client_id)
+  if state.users[client_id] and state.users[client_id].color then
+    return state.users[client_id].color
+  end
+  return "#FFFFFF"
+end
+
 function M.on_join_good(payload)
   vim.notify("Joined session! Active users: " .. #payload.active_users, vim.log.levels.INFO)
   for _, user in ipairs(payload.active_users) do
@@ -76,9 +83,24 @@ function M.on_sync(payload)
   if payload.cursors then
     for _, c in ipairs(payload.cursors) do
       if c.client_id ~= state.client_id then
+        if not state.users[c.client_id] then
+          state.users[c.client_id] = { id = c.client_id, username = c.client_id, color = "#FFFFFF" }
+        end
+        state.users[c.client_id].cursor = {
+          path = path,
+          line = c.pos[1],
+          col = c.pos[2]
+        }
+
         local current_buf = vim.api.nvim_get_current_buf()
         if buf == current_buf then
-          cursor_ui.setup_cursor(c.client_id, c.pos[1], c.pos[2])
+          cursor_ui.setup_cursor(
+            c.client_id,
+            c.pos[1],
+            c.pos[2],
+            c.selection,
+            get_user_color(c.client_id)
+          )
         end
       end
     end
@@ -88,20 +110,28 @@ end
 function M.on_cursor(sender_id, payload)
   if sender_id == state.client_id then return end
 
-  if state.users[sender_id] then
-    state.users[sender_id].cursor = {
-      path = payload.path,
-      line = payload.pos[1],
-      col = payload.pos[2]
-    }
+  if not state.users[sender_id] then
+    state.users[sender_id] = { id = sender_id, username = sender_id, color = "#FFFFFF" }
   end
+
+  state.users[sender_id].cursor = {
+    path = payload.path,
+    line = payload.pos[1],
+    col = payload.pos[2]
+  }
 
   local path = payload.path
   local buf = state.get_buf_by_path(path)
   local current_buf = vim.api.nvim_get_current_buf()
 
   if buf and buf == current_buf then
-    cursor_ui.setup_cursor(sender_id, payload.pos[1], payload.pos[2])
+    cursor_ui.setup_cursor(
+      sender_id,
+      payload.pos[1],
+      payload.pos[2],
+      payload.selection,
+      get_user_color(sender_id)
+    )
   else
     cursor_ui.remove_cursor(sender_id)
   end

@@ -95,7 +95,7 @@ function M.edit(client_id, path, start_row, start_col, end_row, end_col, text_li
   }
 end
 
-function M.cursor(client_id, path, line, col)
+function M.cursor(client_id, path, line, col, selection)
   return {
     type = "CURSOR",
     client_id = client_id,
@@ -103,7 +103,7 @@ function M.cursor(client_id, path, line, col)
     payload = {
       path = path,
       pos = { line, col },
-      selection = nil
+      selection = selection
     }
   }
 end

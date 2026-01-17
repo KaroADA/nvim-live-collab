@@ -155,6 +155,17 @@ async fn handle_message(
             println!("{:#?}", response);
 
             send_message(&msg.client_id, &response, &mut guard.clients).await;
+
+            // Broadcast USER_JOINED to everyone else
+            let join_notification = WebSocketMessage {
+                client_id: "server".to_string(),
+                timestamp,
+                content: MessageContent::UserJoined(UserJoinedPayload {
+                    user: user_info.clone(),
+                }),
+            };
+            println!("Broadcasting USER_JOINED");
+            broadcast_message(&msg.client_id, &join_notification, &mut guard.clients).await;
         }
         MessageContent::StartSession(payload) => {
             println!("User started session: {}", msg.client_id);
