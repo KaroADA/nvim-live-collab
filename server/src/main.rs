@@ -293,9 +293,14 @@ async fn handle_message(
                 selection: payload.selection.clone(),
             };
 
-            if let Some(file) = guard.files.get_mut(&payload.path) {
-                file.current_cursors
-                    .insert(msg.client_id.clone(), remote_cursor);
+            for (path, file_data) in guard.files.iter_mut() {
+                if *path == payload.path {
+                    file_data
+                        .current_cursors
+                        .insert(msg.client_id.clone(), remote_cursor.clone());
+                } else {
+                    file_data.current_cursors.remove(&msg.client_id);
+                }
             }
 
             let broadcast_msg = WebSocketMessage {
