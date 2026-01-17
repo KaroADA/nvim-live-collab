@@ -96,6 +96,7 @@ function M.on_sync(payload)
         if buf == current_buf then
           cursor_ui.setup_cursor(
             c.client_id,
+            state.users[c.client_id].username,
             c.pos[1],
             c.pos[2],
             c.selection,
