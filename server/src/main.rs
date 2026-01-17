@@ -105,8 +105,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 fn get_random_color() -> String {
     let colors = [
-        "#FF0000", "#00FF00", "#0000FF", "#FFFF00", "#FF00FF", "#00FFFF", "#FFA500", "#800080",
-        "#008080", "#FFC0CB",
+        "#B8DB80", // Pastelowa zieleń
+        "#F39EB6", // Różowy
+        "#79C9C5", // Turkusowy
+        "#F96E5B", // Koralowy/Czerwony
+        "#FFE2AF", // Jasny kremowy/żółty
+        "#FFB76C", // Pomarańczowy
+        "#5A9CB5", // Zgaszony niebieski
+        "#85409D", // Fiolet
+        "#FFA4A4", // Jasny czerwony/łososiowy
+        "#BADFDB", // Bardzo jasny błękit/mięta
     ];
 
     let index = SystemTime::now()
@@ -175,7 +183,7 @@ async fn handle_message(
 
             let user_info = UserInfo {
                 id: msg.client_id.clone(),
-                username: msg.client_id.clone(),
+                username: payload.username.clone(),
                 color: get_random_color(),
             };
             guard.users.insert(msg.client_id.clone(), user_info);

@@ -55,6 +55,7 @@ pub struct FileState {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct StartSessionPayload {
+    pub username: String,
     pub project_name: String,
     pub files: Vec<FileState>,
 }
