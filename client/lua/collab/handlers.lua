@@ -95,34 +95,54 @@ function M.on_edit(sender_id, payload)
   local buf = state.get_buf_by_path(path)
 
   if not buf or not vim.api.nvim_buf_is_valid(buf) then return end
-  -- Ignore edits if the buffer is not visible
   if vim.fn.bufwinnr(buf) == -1 then return end
 
   local op = payload.op
-  local start_pos = op.start
-  local end_pos = op["end"]
+  local s_row, s_col = op.start.row, op.start.col
+  local e_row, e_col = op["end"].row, op["end"].col
   local text = op.text
+
+  local line_count = vim.api.nvim_buf_line_count(buf)
+  if line_count == 0 then return end
+
+  -- Clamp Row/Col to valid text area
+  local function clamp_pos(row, col)
+    if row >= line_count then
+      row = line_count - 1
+      local lines = vim.api.nvim_buf_get_lines(buf, row, row + 1, false)
+      col = lines[1] and #lines[1] or 0
+    else
+      local lines = vim.api.nvim_buf_get_lines(buf, row, row + 1, false)
+      local len = lines[1] and #lines[1] or 0
+      if col > len then col = len end
+    end
+    return row, col
+  end
+  s_row, s_col = clamp_pos(s_row, s_col)
+  e_row, e_col = clamp_pos(e_row, e_col)
+  if s_row > e_row or (s_row == e_row and s_col > e_col) then
+    e_row, e_col = s_row, s_col
+  end
 
   state.is_applying_edit = true
 
-  -- Apply the edit
   local ok, err = pcall(vim.api.nvim_buf_set_text, buf,
-    start_pos.row,
-    start_pos.col,
-    end_pos.row,
-    end_pos.col,
+    s_row, s_col,
+    e_row, e_col,
     text
   )
 
   if ok then
-    -- Update our local revision to match the server
     if payload.revision then
       state.set_revision(path, payload.revision)
     end
   else
-    vim.notify("Collab Apply Error: " .. tostring(err), vim.log.levels.ERROR)
-    -- Maybe re-sync
+    vim.notify(string.format(
+      "Collab Apply Error: %s\nRange: (%d,%d) -> (%d,%d)\nLines: %d",
+      tostring(err), s_row, s_col, e_row, e_col, line_count
+    ), vim.log.levels.ERROR)
   end
+
   state.is_applying_edit = false
 end
 

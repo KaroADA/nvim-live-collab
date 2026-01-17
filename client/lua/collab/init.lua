@@ -85,46 +85,47 @@ local function attach_to_buffer(buf)
       end
       -- When pasting/restoring, new_end_row might equal line_count.
       local line_count = vim.api.nvim_buf_line_count(buf_handle)
-      if new_end_row >= line_count then
-        new_end_row = line_count - 1
-        local last_line = vim.api.nvim_buf_get_lines(buf_handle, new_end_row, new_end_row + 1, false)[1] or ""
-        new_end_col = #last_line
-      end
+      local new_text = {}
+      if start_row < line_count then
+        -- Standard Clamp: Ensure we don't read past EOF for normal edits
+        if new_end_row >= line_count then
+          new_end_row = line_count - 1
+          local last_line_content = vim.api.nvim_buf_get_lines(buf_handle, new_end_row, new_end_row + 1, false)[1] or ""
+          new_end_col = #last_line_content
+        end
 
-      local ok, new_text = pcall(vim.api.nvim_buf_get_text,
-        buf_handle,
-        start_row,
-        start_col,
-        new_end_row,
-        new_end_col,
-        {}
-      )
-
-      if ok then
-        local relative_path = get_relative_path(buf_handle)
-        local is_range_empty = (start_row == old_end_row) and (start_col == old_end_col)
-        local is_text_empty = (#new_text == 1) and (new_text[1] == "")
-        if is_range_empty and is_text_empty then
+        local ok, result = pcall(vim.api.nvim_buf_get_text, buf_handle, start_row, start_col, new_end_row, new_end_col,
+          {})
+        if ok then
+          new_text = result
+        else
+          vim.notify(string.format(
+            "Collab Sync Error!\nRange: (%d,%d) -> (%d,%d)\nBuffer Lines: %d",
+            start_row, start_col, new_end_row, new_end_col, line_count
+          ), vim.log.levels.ERROR)
           return
         end
-        local msg = protocol.edit(
-          state.client_id,
-          relative_path,
-          start_row,
-          start_col,
-          old_end_row,
-          old_end_col,
-          new_text,
-          state.get_revision(relative_path)
-        )
-        transport.send(msg)
-      else
-        vim.notify(string.format(
-          "Collab Sync Error!\nRange: (%d,%d) -> (%d,%d)\nBuffer Lines: %d\nError: %s",
-          start_row, start_col, new_end_row, new_end_col, line_count, result
-        ), vim.log.levels.ERROR)
       end
-    end,
+
+      local relative_path = get_relative_path(buf_handle)
+      local is_range_empty = (start_row == old_end_row) and (start_col == old_end_col)
+      local is_text_empty = (#new_text == 1) and (new_text[1] == "")
+      if is_range_empty and is_text_empty then
+        return
+      end
+      local msg = protocol.edit(
+        state.client_id,
+        relative_path,
+        start_row,
+        start_col,
+        old_end_row,
+        old_end_col,
+        new_text,
+        state.get_revision(relative_path)
+      )
+      transport.send(msg)
+    end
+    ,
 
     on_detach = function()
       attached_buffers[buf] = nil
