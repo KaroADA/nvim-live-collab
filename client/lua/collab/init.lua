@@ -251,7 +251,7 @@ local function enable_file_tracking()
       attach_to_buffer(buf)
 
       -- Try to sync with server
-      if transport.client and not state.is_host then
+      if transport.client then
         if vim.b[buf].collab_enabled then
           local path = get_relative_path(buf)
           vim.notify(path)
