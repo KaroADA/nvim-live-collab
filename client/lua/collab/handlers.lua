@@ -102,6 +102,8 @@ function M.on_sync(payload)
             c.selection,
             get_user_color(c.client_id)
           )
+        else
+          cursor_ui.remove_cursor(c.client_id)
         end
       end
     end
