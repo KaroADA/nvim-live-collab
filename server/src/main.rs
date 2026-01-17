@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::collections::HashSet;
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -103,7 +104,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 }
 
-fn get_random_color() -> String {
+fn assign_color(username: &str, users: &HashMap<String, UserInfo>) -> String {
     let colors = [
         "#B8DB80", // Pastelowa zieleń
         "#F39EB6", // Różowy
@@ -115,13 +116,19 @@ fn get_random_color() -> String {
         "#85409D", // Fiolet
         "#FFA4A4", // Jasny czerwony/łososiowy
         "#BADFDB", // Bardzo jasny błękit/mięta
+        "#E6E6FA", // Lawendowy
     ];
 
-    let index = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap_or(std::time::Duration::from_secs(0))
-        .subsec_nanos() as usize
-        % colors.len();
+    let hash = username
+        .bytes()
+        .fold(0u32, |acc, b| acc.wrapping_add(b as u32));
+    let mut index = (hash as usize) % colors.len();
+
+    let used_colors: HashSet<&String> = users.values().map(|u| &u.color).collect();
+
+    while used_colors.contains(&colors[index].to_string()) {
+        index = (index + 1) % colors.len();
+    }
 
     colors[index].to_string()
 }
@@ -139,7 +146,7 @@ async fn handle_message(
             let user_info = UserInfo {
                 id: msg.client_id.clone(),
                 username: payload.username.clone(),
-                color: get_random_color(),
+                color: assign_color(&payload.username, &guard.users),
             };
             guard.users.insert(msg.client_id.clone(), user_info.clone());
             if let Some(writer) = socket_writer.take() {
@@ -184,7 +191,7 @@ async fn handle_message(
             let user_info = UserInfo {
                 id: msg.client_id.clone(),
                 username: payload.username.clone(),
-                color: get_random_color(),
+                color: assign_color(&payload.username, &guard.users),
             };
             guard.users.insert(msg.client_id.clone(), user_info);
 
@@ -236,6 +243,9 @@ async fn handle_message(
                         cursors: Some(file.current_cursors.values().cloned().collect()),
                     }),
                 };
+
+                println!("Sending SYNC response to {}", msg.client_id);
+                println!("{:#?}", response);
 
                 send_message(&msg.client_id, &response, &mut guard.clients).await;
             } else {
