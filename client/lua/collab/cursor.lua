@@ -16,27 +16,25 @@ local function ensure_hl_groups(client_id, color_hex)
   local safe_user = client_id:gsub("%W", "_")
   local user_hl = "CollabUser_" .. safe_user
   local block_hl = "CollabBlock_" .. safe_user
-  local sel_hl = "CollabSel_" .. safe_user
   vim.api.nvim_set_hl(0, user_hl, { fg = color_hex, italic = true, default = false })
   vim.api.nvim_set_hl(0, block_hl, { bg = color_hex, fg = "#000000", default = false })
-  vim.api.nvim_set_hl(0, sel_hl, { bg = color_hex, default = false })
-  return user_hl, block_hl, sel_hl
+  return user_hl, block_hl
 end
 
 function M.setup_cursor(client_id, username, line, col, selection, color_hex)
   M.remove_cursor_ui(client_id)
   color_hex = color_hex or "#FFFFFF"
-  local user_hl, block_hl, sel_hl = ensure_hl_groups(client_id, color_hex)
+  local user_hl, block_hl = ensure_hl_groups(client_id, color_hex)
 
   local mark_id = nil
   local label_id = nil
   local selection_id = nil
 
   if is_visible then
-    if selection and selection ~= vim.NIL then
+    local line_count = vim.api.nvim_buf_line_count(0)
+    if selection and selection ~= vim.NIL and selection.start then
       local s_row, s_col = selection.start[1], selection.start[2]
       local e_row, e_col = selection["end"][1], selection["end"][2]
-      local line_count = vim.api.nvim_buf_line_count(0)
       if s_row < line_count and e_row < line_count then
         local lines = vim.api.nvim_buf_get_lines(0, e_row, e_row + 1, false)
         local end_line_len = lines[1] and #lines[1] or 0
@@ -44,10 +42,20 @@ function M.setup_cursor(client_id, username, line, col, selection, color_hex)
         _, selection_id = pcall(vim.api.nvim_buf_set_extmark, 0, ns_id, s_row, s_col, {
           end_row = e_row,
           end_col = e_col,
-          hl_group = sel_hl,
+          hl_group = "Visual",
           priority = 90,
         })
       end
+    end
+    if not line or line == vim.NIL then line = 0 end
+    if not col or col == vim.NIL then col = 0 end
+    if line >= line_count then
+      line = line_count - 1
+    end
+    local lines = vim.api.nvim_buf_get_lines(0, line, line + 1, false)
+    local end_line_len = lines[1] and #lines[1] or 0
+    if col > end_line_len then
+      col = end_line_len
     end
     mark_id = vim.api.nvim_buf_set_extmark(0, ns_id, line, col, {
       virt_text = { { " ", block_hl } },
